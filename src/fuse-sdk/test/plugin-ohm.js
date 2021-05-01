@@ -142,6 +142,8 @@ async function setupOhmBorrowWithEthCollateral() {
 
   // Set price of ETH collateral to 1/10th of what it was
   await simplePriceOracle.methods.setDirectPrice("0x0000000000000000000000000000000000000000", Fuse.Web3.utils.toBN(1e17)).send({ from: accounts[0], gasPrice: "0" });
+
+  return cToken;
 }
 
 describe('OHMInterestRateModel', function() {
@@ -155,23 +157,34 @@ describe('OHMInterestRateModel', function() {
   describe('#getBorrowRate()', function() {
     // Check borrow rate when there are no borrows
     it('should return the correct borrow rate when there are no borrows', dryRun(async () => {
-      await setupOhmBorrowWithEthCollateral(undefined, true);
-      console.log('your mom')
-      // TODO: Check borrow rate against OHM staking rate
+      var cToken = new fuse.web3.eth.Contract(cErc20Abi, assetAddresses["fOHM"]);
+      var interestRateModel = await cToken.methods.interestRateModel().call();
+      var ohmBorrowRate = (await cToken.methods.borrowRatePerBlock().call()) / 1e18;
+      var modelBorrowRate = (await interestRateModel.methods.getBorrowRate().call()) / 1e18;
+      assert.equal(ohmBorrowRate, modelBorrowRate);
+
     }));
 
     // Check borrow rate
     it('should return the correct borrow rate when there are borrows', dryRun(async () => {
-      await setupOhmBorrowWithEthCollateral(undefined, true);
       // TODO: Check borrow rate against expected borrow rate (given OHM staking rate and utilization rate)
+      var cToken = await setupOhmBorrowWithEthCollateral(undefined, true);
+      var interestRateModel = await cToken.methods.interestRateModel().call();
+      var ohmBorrowRate = (await cToken.methods.borrowRatePerBlock().call()) / 1e18;
+      var modelBorrowRate = (await interestRateModel.methods.getBorrowRate().call()) / 1e18;
+      assert.equal(ohmBorrowRate, modelBorrowRate);
     }));
   });
 
   describe('#getSupplyRate()', function() {
-    // Check borrow rate
+    // Check supply rate
     it('should return the correct borrow rate', dryRun(async () => {
-      await setupOhmBorrowWithEthCollateral(undefined, true);
-      // TODO: Check borrow rate
+      // TODO: Check supply rate
+      var cToken = await setupOhmBorrowWithEthCollateral(undefined, true);
+      var interestRateModel = await cToken.methods.interestRateModel().call();
+      var ohmSupplyRate = (await cToken.methods.supplyRatePerBlock().call()) / 1e18;
+      var modelSupplyRate = (await interestRateModel.methods.getSupplyRate().call()) / 1e18; 
+      assert.equal(ohmSupplyRate, modelSupplyRate);
     }));
   });
 });
@@ -187,7 +200,7 @@ describe('COhmDelegate', function() {
   describe('#mint()', function() {
     // Check borrow rate
     it('should return the correct supply balance', dryRun(async () => {
-      await setupOhmBorrowWithEthCollateral(undefined, true);
+      var cToken = await setupOhmBorrowWithEthCollateral(undefined, true);
 
       // Jump 30 days into the future
       await increaseTime(60 * 60 * 24 * 30);
@@ -200,7 +213,7 @@ describe('COhmDelegate', function() {
     // Check borrow rate
     it('should return the correct borrow balance', dryRun(async () => {
       // Setup OHM borrow with ETH collateral
-      await setupOhmBorrowWithEthCollateral(undefined, true);
+       var cToken = await setupOhmBorrowWithEthCollateral(undefined, true);
 
       // Jump 30 days into the future
       await increaseTime(60 * 60 * 24 * 30);
