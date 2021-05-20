@@ -10,7 +10,6 @@ var erc20Abi = JSON.parse(fuse.compoundContracts["contracts/EIP20Interface.sol:E
 var cErc20Abi = JSON.parse(fuse.compoundContracts["contracts/CErc20Delegate.sol:CErc20Delegate"].abi);
 var cEtherAbi = JSON.parse(fuse.compoundContracts["contracts/CEtherDelegate.sol:CEtherDelegate"].abi);
 
-
 // Snapshot + revert + dry run wrapper function
 var snapshotId = null;
 
@@ -119,12 +118,11 @@ async function deployPoolWithEthAndOhm() {
     await simplePriceOracle.methods.setDirectPrice("0x0000000000000000000000000000000000000000", Fuse.Web3.utils.toBN(1e18)).send({ from: accounts[0], gasPrice: "0", gas: 1000000 });
     await simplePriceOracle.methods.setDirectPrice("0x383518188c0c6d7730d91b2c03a03c837814a899", "367772000000000000").send({ from: accounts[0], gasPrice: "0", gas: 1000000 });
 
-
     // Deploy assets
     assetAddresses = {};
     for (const conf of [
         { name: "Fuse ETH", symbol: "fETH" },
-        { name: "Fuse OHM", symbol: "fOHM", underlying: "0x383518188c0c6d7730d91b2c03a03c837814a899" }
+        { name: "Fuse OHM", symbol: "fOHM", underlying: "0x383518188c0c6d7730d91b2c03a03c837814a899", interestRateModel: "OHMInterestRateModel", implementationContractName: "COhmDelegate" }
     ]) assetAddresses[conf.symbol] = await deployAsset({ comptroller: poolAddress, ...conf }, undefined, undefined, undefined, { from: '0xb8f02248d53f7edfa38e79263e743e9390f81942', gasPrice: "0", gas: 1000000 }, true);
 }
 
@@ -152,7 +150,7 @@ async function setupOhmBorrowWithEthCollateral() {
 
 describe('OHMInterestRateModel', function() {
     this.timeout(10000);
-    var interestRateModelAbi = JSON.parse(fuse.compoundContracts["contracts/InterestRateModel.sol:InterestRateModel"].abi);
+    var interestRateModelAbi = JSON.parse(fuse.compoundContracts["contracts/OHMInterestRateModel.sol:OHMInterestRateModel"].abi);
 
     before(async function() {
         this.timeout(20000);

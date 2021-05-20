@@ -16,7 +16,9 @@ var usedContractAbiKeys = [
   "contracts/WhitePaperInterestRateModel.sol:WhitePaperInterestRateModel",
   "contracts/JumpRateModel.sol:JumpRateModel",
   "contracts/DAIInterestRateModelV2.sol:DAIInterestRateModelV2",
-  "contracts/SimplePriceOracle.sol:SimplePriceOracle"
+  "contracts/SimplePriceOracle.sol:SimplePriceOracle",
+  "contracts/COhmDelegate.sol:COhmDelegate",
+  "contracts/OHMInterestRateModel.sol:OHMInterestRateModel"
 ];
 for (const contractKey of usedContractAbiKeys) {
   if (!minContracts[contractKey]) minContracts[contractKey] = {};
@@ -32,7 +34,9 @@ var usedContractBinKeys = [
   "contracts/WhitePaperInterestRateModel.sol:WhitePaperInterestRateModel",
   "contracts/JumpRateModel.sol:JumpRateModel",
   "contracts/DAIInterestRateModelV2.sol:DAIInterestRateModelV2",
-  "contracts/SimplePriceOracle.sol:SimplePriceOracle"
+  "contracts/SimplePriceOracle.sol:SimplePriceOracle",
+  "contracts/COhmDelegate.sol:COhmDelegate",
+  "contracts/OHMInterestRateModel.sol:OHMInterestRateModel"
 ];
 for (const contractKey of usedContractBinKeys) {
   if (!minContracts[contractKey]) minContracts[contractKey] = {};

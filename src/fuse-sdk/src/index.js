@@ -37,6 +37,8 @@ export default class Fuse {
   static CETHER_DELEGATE_CONTRACT_ADDRESS =
     "0x60884c8faad1b30b1c76100da92b76ed3af849ba";
 
+  static UNITROLLER_BYTECODE_HASH = "0x5aa532433ef20928a2c978468df5113ba000e041824c17615cdb477f5a0ae4c7";
+
   static OPEN_ORACLE_PRICE_DATA_CONTRACT_ADDRESS =
     "0xc629c26dced4277419cde234012f8160a0278a79";
   static COINBASE_PRO_REPORTER_ADDRESS =
@@ -96,6 +98,13 @@ export default class Fuse {
     "YVaultV2PriceOracle",
     "AlphaHomoraV1PriceOracle",
     "SynthetixPriceOracle",
+  ];
+
+  static INTEREST_RATE_MODEL_CONTRACT_NAMES = [
+    "WhitePaperInterestRateModel",
+    "JumpRateModel",
+    "DAIInterestRateModelV2",
+    "OHMInterestRateModel"
   ];
 
   static PUBLIC_INTEREST_RATE_MODEL_CONTRACT_ADDRESSES = {
@@ -230,9 +239,7 @@ export default class Fuse {
       var poolAddress = this.getCreate2Address(
         Fuse.FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS,
         [options.from, poolName, receipt.blockNumber],
-        this.web3.utils.sha3(
-          "0x" + contracts["contracts/Unitroller.sol:Unitroller"].bin
-        )
+        Fuse.UNITROLLER_BYTECODE_HASH
       );
       var unitroller = new this.web3.eth.Contract(
         JSON.parse(contracts["contracts/Unitroller.sol:Unitroller"].abi),
@@ -567,13 +574,9 @@ export default class Fuse {
       options,
       bypassPriceFeedCheck
     ) {
-      // Deploy new interest rate model via SDK if requested
+      // Deploy new interest rate model via SDK if requested (for OHMInterestRateModel, deploy after)
       if (
-        [
-          "WhitePaperInterestRateModel",
-          "JumpRateModel",
-          "DAIInterestRateModelV2",
-        ].indexOf(conf.interestRateModel) >= 0
+        Fuse.INTEREST_RATE_MODEL_CONTRACT_NAMES.indexOf(conf.interestRateModel) >= 0 && conf.interestRateModel !== "OHMInterestRateModel"
       ) {
         try {
           conf.interestRateModel = await this.deployInterestRateModel(
@@ -592,7 +595,7 @@ export default class Fuse {
       // Deploy new asset to existing pool via SDK
       try {
         var [assetAddress, implementationAddress] = await this.deployCToken(
-          conf,
+          { ...conf, interestRateModel: conf.interestRateModel === "OHMInterestRateModel" ? Fuse.PUBLIC_INTEREST_RATE_MODEL_CONTRACT_ADDRESSES.WhitePaperInterestRateModel_ETH : conf.interestRateModel },
           true,
           collateralFactor,
           reserveFactor,
@@ -605,6 +608,33 @@ export default class Fuse {
           "Deployment of asset to Fuse pool failed: " +
           (error.message ? error.message : error)
         );
+      }
+
+      // Deploy OHMInterestRateModel afterwards if requested
+      if (
+        conf.interestRateModel === "OHMInterestRateModel"
+      ) {
+        try {
+          conf.interestRateModel = await this.deployInterestRateModel(
+            conf.interestRateModel,
+            { token: assetAddress, ...conf.interestRateModelConf },
+            options
+          );
+        } catch (error) {
+          throw (
+            "Deployment of interest rate model failed: " +
+            (error.message ? error.message : error)
+          );
+        }
+
+        // Set interest rate model on asset now that its deployed
+        var assetContract = new this.web3.eth.Contract(
+          JSON.parse(
+            contracts["contracts/CTokenInterfaces.sol:CTokenInterface"].abi
+          ),
+          assetAddress
+        );
+        await assetContract.methods._setInterestRateModel(conf.interestRateModel).send(options);
       }
 
       return [assetAddress, implementationAddress, conf.interestRateModel];
@@ -655,6 +685,12 @@ export default class Fuse {
               multiplierPerYear: "200000000000000000",
             };
           deployArgs = [conf.baseRatePerYear, conf.multiplierPerYear];
+          break;
+        case "OHMInterestRateModel":
+          if (conf.jumpMultiplierPerYear === undefined) conf.jumpMultiplierPerYear = "2000000000000000000";
+          if (conf.kink === undefined) conf.kink = "900000000000000000";
+          if (conf.staking === undefined) conf.staking = "0x0822f3c03dcc24d200aff33493dc08d0e1f274a2";
+          deployArgs = [conf.jumpMultiplierPerYear, conf.kink, conf.token, conf.staking];
           break;
       }
 
@@ -775,7 +811,7 @@ export default class Fuse {
               "0x" +
               contracts["contracts/CEtherDelegate.sol:CEtherDelegate"].bin,
           })
-          .send(options);
+          .send({ ...options, gas: 10e6 });
         implementationAddress = cEtherDelegate.options.address;
       }
 
@@ -875,18 +911,19 @@ export default class Fuse {
 
       // Deploy CErc20Delegate implementation contract if necessary
       if (!implementationAddress) {
+        if (!conf.implementationContractName) conf.implementationContractName = "CErc20Delegate";
         var cErc20Delegate = new this.web3.eth.Contract(
           JSON.parse(
-            contracts["contracts/CErc20Delegate.sol:CErc20Delegate"].abi
+            contracts["contracts/" + conf.implementationContractName + ".sol:" + conf.implementationContractName].abi
           )
         );
         cErc20Delegate = await cErc20Delegate
           .deploy({
             data:
               "0x" +
-              contracts["contracts/CErc20Delegate.sol:CErc20Delegate"].bin,
+              contracts["contracts/" + conf.implementationContractName + ".sol:" + conf.implementationContractName].bin,
           })
-          .send(options);
+          .send({ ...options, gas: 10e6 });
         implementationAddress = cErc20Delegate.options.address;
       }
 
@@ -955,11 +992,7 @@ export default class Fuse {
       );
       var interestRateModel = null;
 
-      for (const model of [
-        "JumpRateModel",
-        "DAIInterestRateModelV2",
-        "WhitePaperInterestRateModel",
-      ])
+      for (const model of Fuse.INTEREST_RATE_MODEL_CONTRACT_NAMES)
         if (
           runtimeBytecodeHash == interestRateModels[model].RUNTIME_BYTECODE_HASH
         )
