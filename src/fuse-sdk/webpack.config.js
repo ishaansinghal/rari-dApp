@@ -5,7 +5,7 @@ const CompressionPlugin = require("compression-webpack-plugin");
 module.exports = [
   /* createConfig('commonjs2'), */
   createConfig('commonjs2', 'node'),
-  createConfig('window')
+  /* createConfig('window') */
 ];
 
 function createConfig(libraryTarget, target) {
