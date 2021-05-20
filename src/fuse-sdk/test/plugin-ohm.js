@@ -108,8 +108,10 @@ async function deployAsset(conf, collateralFactor, reserveFactor, adminFee, opti
 async function deployPoolWithEthAndOhm() {
     accounts = await fuse.web3.eth.getAccounts();
 
+    await fuse.contracts.FusePoolDirectory.methods._whitelistDeployers(['0xb8f02248d53f7edfa38e79263e743e9390f81942']).send({ from: '0x10dB6Bce3F2AE1589ec91A872213DAE59697967a' });
+
     // Deploy pool
-    var [poolAddress, priceOracleAddress] = await deployPool({ priceOracle: "SimplePriceOracle" }, { from: "0xb8f02248d53f7edfa38e79263e743e9390f81942", gasPrice: "0", gas: 1000000 });
+    var [poolAddress, priceOracleAddress] = await deployPool({ priceOracle: "SimplePriceOracle" }, { from: '0xb8f02248d53f7edfa38e79263e743e9390f81942', gasPrice: "0", gas: 1000000 });
     comptroller = new fuse.web3.eth.Contract(JSON.parse(fuse.compoundContracts["contracts/Comptroller.sol:Comptroller"].abi), poolAddress);
 
     // Set initial token prices
@@ -117,12 +119,13 @@ async function deployPoolWithEthAndOhm() {
     await simplePriceOracle.methods.setDirectPrice("0x0000000000000000000000000000000000000000", Fuse.Web3.utils.toBN(1e18)).send({ from: accounts[0], gasPrice: "0", gas: 1000000 });
     await simplePriceOracle.methods.setDirectPrice("0x383518188c0c6d7730d91b2c03a03c837814a899", "367772000000000000").send({ from: accounts[0], gasPrice: "0", gas: 1000000 });
 
+
     // Deploy assets
     assetAddresses = {};
     for (const conf of [
         { name: "Fuse ETH", symbol: "fETH" },
         { name: "Fuse OHM", symbol: "fOHM", underlying: "0x383518188c0c6d7730d91b2c03a03c837814a899" }
-    ]) assetAddresses[conf.symbol] = await deployAsset({ comptroller: poolAddress, ...conf }, undefined, undefined, undefined, { from: accounts[0], gasPrice: "0", gas: 1000000 }, true);
+    ]) assetAddresses[conf.symbol] = await deployAsset({ comptroller: poolAddress, ...conf }, undefined, undefined, undefined, { from: '0xb8f02248d53f7edfa38e79263e743e9390f81942', gasPrice: "0", gas: 1000000 }, true);
 }
 
 // Function to set up OHM borrows
@@ -149,10 +152,17 @@ async function setupOhmBorrowWithEthCollateral() {
 
 describe('OHMInterestRateModel', function() {
     this.timeout(10000);
-    // const interestRateModelAbi = JSON.parse(fuse.compoundContracts["contracts/InterestRateModel.sol:InterestRateModel"].abi);
+    var interestRateModelAbi = JSON.parse(fuse.compoundContracts["contracts/InterestRateModel.sol:InterestRateModel"].abi);
 
     before(async function() {
         this.timeout(20000);
+
+        await fuse.contracts.FuseFeeDistributor.methods._setPoolLimits(
+            Fuse.Web3.utils.toBN(0),
+            Fuse.Web3.utils.toBN(2).pow(Fuse.Web3.utils.toBN(256)).subn(1),
+            Fuse.Web3.utils.toBN(2).pow(Fuse.Web3.utils.toBN(256)).subn(1)
+        ).send({ from: '0x10dB6Bce3F2AE1589ec91A872213DAE59697967a' });
+
         await deployPoolWithEthAndOhm();
     });
 
@@ -200,6 +210,13 @@ describe('COhmDelegate', function() {
 
     before(async function() {
         this.timeout(20000);
+
+        await fuse.contracts.FuseFeeDistributor.methods._setPoolLimits(
+            Fuse.Web3.utils.toBN(0),
+            Fuse.Web3.utils.toBN(2).pow(Fuse.Web3.utils.toBN(256)).subn(1),
+            Fuse.Web3.utils.toBN(2).pow(Fuse.Web3.utils.toBN(256)).subn(1)
+        ).send({ from: '0x10dB6Bce3F2AE1589ec91A872213DAE59697967a' });
+
         await deployPoolWithEthAndOhm();
     });
 
