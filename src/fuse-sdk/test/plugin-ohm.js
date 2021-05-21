@@ -122,7 +122,8 @@ async function deployPoolWithEthAndOhm() {
     assetAddresses = {};
     for (const conf of [
         { name: "Fuse ETH", symbol: "fETH" },
-        { name: "Fuse OHM", symbol: "fOHM", underlying: "0x383518188c0c6d7730d91b2c03a03c837814a899", interestRateModel: "OHMInterestRateModel", implementationContractName: "COhmDelegate" }
+        {name : "Fuse sOHM", symbol: "fsOHM", underlying: "0x31932e6e45012476ba3a3a4953cba62aee77fbbe", interestRateModel: "OHMInterestRateModel"}
+        // { name: "Fuse OHM", symbol: "fOHM", underlying: "0x383518188c0c6d7730d91b2c03a03c837814a899", interestRateModel: "OHMInterestRateModel"} //implementationContractName: "COhmDelegate" }
     ]) assetAddresses[conf.symbol] = await deployAsset({ comptroller: poolAddress, ...conf }, undefined, undefined, undefined, { from: '0xb8f02248d53f7edfa38e79263e743e9390f81942', gasPrice: "0", gas: 1000000 }, true);
 }
 
@@ -133,8 +134,8 @@ async function setupOhmBorrowWithEthCollateral() {
     await cToken.methods.mint().send({ from: accounts[0], gasPrice: "0", value: Fuse.Web3.utils.toBN(1e15) });
 
     // Supply OHM from other account
-    var token = new fuse.web3.eth.Contract(erc20Abi, "0x383518188c0c6d7730d91b2c03a03c837814a899");
-    var cToken = new fuse.web3.eth.Contract(cErc20Abi, assetAddresses["fOHM"]);
+    var token = new fuse.web3.eth.Contract(erc20Abi, "0x31932e6e45012476ba3a3a4953cba62aee77fbbe");
+    var cToken = new fuse.web3.eth.Contract(cErc20Abi, assetAddresses["fsOHM"]);
     await token.methods.approve(cToken.options.address, Fuse.Web3.utils.toBN(1e18)).send({ from: accounts[1], gasPrice: "0" });
     await cToken.methods.mint(Fuse.Web3.utils.toBN(1e6)).send({ from: accounts[1], gasPrice: "0" });
 
@@ -168,7 +169,7 @@ describe('OHMInterestRateModel', function() {
         // Check borrow rate when there are no borrows
         it('should return the correct borrow rate when there are no borrows', dryRun(async () => {
 
-            var cToken = new fuse.web3.eth.Contract(cErc20Abi, assetAddresses["fOHM"]);
+            var cToken = new fuse.web3.eth.Contract(cErc20Abi, assetAddresses["fsOHM"]);
             var interestRateModel = new fuse.web3.eth.Contract(interestRateModelAbi, await cToken.methods.interestRateModel().call());
             var ohmBorrowRate = (await cToken.methods.borrowRatePerBlock().call()) / 1e18;
             var modelBorrowRate = (await interestRateModel.methods.getBorrowRate().call()) / 1e18;
@@ -202,7 +203,7 @@ describe('OHMInterestRateModel', function() {
     });
 });
 
-describe('COhmDelegate', function() {
+describe('CErc20Delegate', function() {
     this.timeout(10000);
     const blocksPerDay = 4 * 60 * 24;
 
