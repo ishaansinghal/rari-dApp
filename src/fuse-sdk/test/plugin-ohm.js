@@ -1,10 +1,12 @@
 var assert = require('assert');
 var Big = require('big.js');
+var hre = require('hardhat');
 
 const Fuse = require("../dist/fuse.node.commonjs2.js");
 
 assert(process.env.TESTING_WEB3_PROVIDER_URL, "Web3 provider URL required");
-var fuse = new Fuse(process.env.TESTING_WEB3_PROVIDER_URL);
+var fuse = new Fuse(process.env.TESTING_WEB3_PROVIDER_URL, hre);
+hre.ethers.provider = new hre.ethers.providers.Web3Provider(fuse.web3.currentProvider);
 
 var erc20Abi = JSON.parse(fuse.compoundContracts["contracts/EIP20Interface.sol:EIP20Interface"].abi);
 var cErc20Abi = JSON.parse(fuse.compoundContracts["contracts/CErc20Delegate.sol:CErc20Delegate"].abi);

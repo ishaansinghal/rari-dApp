@@ -117,8 +117,9 @@ export default class Fuse {
     JumpRateModel_ALCX: "0x58c3e7119ec200c09b2b3a9f8ce3bd77b6b47012",
   };
 
-  constructor(web3Provider) {
+  constructor(web3Provider, hre) {
     this.web3 = new Web3(web3Provider);
+    this.hre = hre;
 
     this.getEthUsdPriceBN = async function () {
       return Web3.utils.toBN(
@@ -204,15 +205,21 @@ export default class Fuse {
         Fuse.COMPTROLLER_IMPLEMENTATION_CONTRACT_ADDRESS;
 
       if (!implementationAddress) {
-        var comptroller = new this.web3.eth.Contract(
-          JSON.parse(contracts["contracts/Comptroller.sol:Comptroller"].abi)
-        );
-        comptroller = await comptroller
-          .deploy({
-            data: "0x" + contracts["contracts/Comptroller.sol:Comptroller"].bin,
-          })
-          .send(options);
-        implementationAddress = comptroller.options.address;
+        if (process.env.HARDHAT) {
+          const comptrollerFactory = await this.hre.ethers.getContractFactory("Comptroller");
+          const comptroller = await comptrollerFactory.deploy();
+          implementationAddress = comptroller.address;
+        } else {
+          var comptroller = new this.web3.eth.Contract(
+            JSON.parse(contracts["contracts/Comptroller.sol:Comptroller"].abi)
+          );
+          comptroller = await comptroller
+            .deploy({
+              data: "0x" + contracts["contracts/Comptroller.sol:Comptroller"].bin,
+            })
+            .send(options);
+          implementationAddress = comptroller.options.address;
+        }
       }
 
       // Register new pool with FusePoolDirectory
@@ -695,15 +702,25 @@ export default class Fuse {
       }
 
       // Deploy InterestRateModel
-      var interestRateModel = new this.web3.eth.Contract(
-        JSON.parse(contracts["contracts/" + model + ".sol:" + model].abi)
-      );
-      interestRateModel = await interestRateModel
-        .deploy({
-          data: "0x" + contracts["contracts/" + model + ".sol:" + model].bin,
-          arguments: deployArgs,
-        })
-        .send(options);
+      if (process.env.HARDHAT) {
+        const irmFactory = await this.hre.ethers.getContractFactory(model);
+        const irm = await irmFactory.deploy(...deployArgs);
+        ;
+        var interestRateModel = new this.web3.eth.Contract(
+          JSON.parse(contracts["contracts/" + model + ".sol:" + model].abi),
+          irm.address
+        );
+      } else {
+        var interestRateModel = new this.web3.eth.Contract(
+          JSON.parse(contracts["contracts/" + model + ".sol:" + model].abi)
+        );
+        interestRateModel = await interestRateModel
+          .deploy({
+            data: "0x" + contracts["contracts/" + model + ".sol:" + model].bin,
+            arguments: deployArgs,
+          })
+          .send(options);
+      }
       return interestRateModel.options.address;
     };
 
@@ -800,27 +817,28 @@ export default class Fuse {
 
       // Deploy CEtherDelegate implementation contract if necessary
       if (!implementationAddress) {
-        var cEtherDelegate = new this.web3.eth.Contract(
-          JSON.parse(
-            contracts["contracts/CEtherDelegate.sol:CEtherDelegate"].abi
-          )
-        );
-        cEtherDelegate = await cEtherDelegate
-          .deploy({
-            data:
-              "0x" +
-              contracts["contracts/CEtherDelegate.sol:CEtherDelegate"].bin,
-          })
-          .send({ ...options, gas: 10e6 });
-        implementationAddress = cEtherDelegate.options.address;
+        if (process.env.HARDHAT) {
+          const delegateFactory = await this.hre.ethers.getContractFactory("CEtherDelegate");
+          const cEtherDelegate = await delegateFactory.deploy();
+          implementationAddress = cEtherDelegate.address;
+        } else {
+          var cEtherDelegate = new this.web3.eth.Contract(
+            JSON.parse(
+              contracts["contracts/CEtherDelegate.sol:CEtherDelegate"].abi
+            )
+          );
+          cEtherDelegate = await cEtherDelegate
+            .deploy({
+              data:
+                "0x" +
+                contracts["contracts/CEtherDelegate.sol:CEtherDelegate"].bin,
+            })
+            .send(options);
+          implementationAddress = cEtherDelegate.options.address;
+        }
       }
 
       // Deploy CEtherDelegator proxy contract if necessary
-      var cEtherDelegator = new this.web3.eth.Contract(
-        JSON.parse(
-          contracts["contracts/CEtherDelegator.sol:CEtherDelegator"].abi
-        )
-      );
       let deployArgs = [
         conf.comptroller,
         conf.interestRateModel,
@@ -830,44 +848,53 @@ export default class Fuse {
         conf.decimals,
         conf.admin,
         implementationAddress,
-        "0x0",
-        reserveFactor ? reserveFactor : 0,
-        adminFee ? adminFee : 0,
+        "0x00",
+        reserveFactor ? reserveFactor.toString() : 0,
+        adminFee ? adminFee.toString() : 0,
       ];
-      cEtherDelegator = await cEtherDelegator
-        .deploy({
-          data:
-            "0x" +
-            contracts["contracts/CEtherDelegator.sol:CEtherDelegator"].bin,
-          arguments: deployArgs,
-        })
-        .send(options);
+      if (process.env.HARDHAT) {
+        const delegatorFactory = await this.hre.ethers.getContractFactory("CEtherDelegator");
+        const cEtherDelegator = await delegatorFactory.deploy(...deployArgs);
+        var cEtherDelegatorAddress = cEtherDelegator.address;
+      } else {
+        var cEtherDelegator = new this.web3.eth.Contract(
+          JSON.parse(
+            contracts["contracts/CEtherDelegator.sol:CEtherDelegator"].abi
+          )
+        );
+        cEtherDelegator = await cEtherDelegator
+          .deploy({
+            data:
+              "0x" +
+              contracts["contracts/CEtherDelegator.sol:CEtherDelegator"].bin,
+            arguments: deployArgs,
+          })
+          .send(options);
+        var cEtherDelegatorAddress = cEtherDelegator.options.address;
+      }
 
       // Register new asset with Comptroller
       var comptroller = new this.web3.eth.Contract(
         JSON.parse(contracts["contracts/Comptroller.sol:Comptroller"].abi),
         conf.comptroller
       );
-      cEtherDelegator.options.jsonInterface = JSON.parse(
-        contracts["contracts/CEtherDelegate.sol:CEtherDelegate"].abi
-      );
 
       if (supportMarket) {
         if (collateralFactor)
           await comptroller.methods
             ._supportMarketAndSetCollateralFactor(
-              cEtherDelegator.options.address,
+              cEtherDelegatorAddress,
               collateralFactor
             )
             .send(options);
         else
           await comptroller.methods
-            ._supportMarket(cEtherDelegator.options.address)
+            ._supportMarket(cEtherDelegatorAddress)
             .send(options);
       }
 
       // Return cToken proxy and implementation contract addresses
-      return [cEtherDelegator.options.address, implementationAddress];
+      return [cEtherDelegatorAddress, implementationAddress];
     };
 
     this.deployCErc20 = async function (
@@ -911,28 +938,29 @@ export default class Fuse {
 
       // Deploy CErc20Delegate implementation contract if necessary
       if (!implementationAddress) {
-        if (!conf.implementationContractName) conf.implementationContractName = "CErc20Delegate";
-        var cErc20Delegate = new this.web3.eth.Contract(
-          JSON.parse(
-            contracts["contracts/" + conf.implementationContractName + ".sol:" + conf.implementationContractName].abi
-          )
-        );
-        cErc20Delegate = await cErc20Delegate
-          .deploy({
-            data:
-              "0x" +
-              contracts["contracts/" + conf.implementationContractName + ".sol:" + conf.implementationContractName].bin,
-          })
-          .send({ ...options, gas: 10e6 });
-        implementationAddress = cErc20Delegate.options.address;
+        if (!conf.delegateContractName) conf.delegateContractName = "CErc20Delegate";
+        if (process.env.HARDHAT) {
+          const delegateFactory = await this.hre.ethers.getContractFactory(conf.delegateContractName);
+          const cErc20Delegate = await delegateFactory.deploy();
+          implementationAddress = cErc20Delegate.address;
+        } else {
+          var cErc20Delegate = new this.web3.eth.Contract(
+            JSON.parse(
+              contracts["contracts/" + conf.delegateContractName + ".sol:" + conf.delegateContractName].abi
+            )
+          );
+          cErc20Delegate = await cErc20Delegate
+            .deploy({
+              data:
+                "0x" +
+                contracts["contracts/" + conf.delegateContractName + ".sol:" + conf.delegateContractName].bin,
+            })
+            .send(options);
+          implementationAddress = cErc20Delegate.options.address;
+        }
       }
 
       // Deploy CErc20Delegator proxy contract if necessary
-      var cErc20Delegator = new this.web3.eth.Contract(
-        JSON.parse(
-          contracts["contracts/CErc20Delegator.sol:CErc20Delegator"].abi
-        )
-      );
       let deployArgs = [
         conf.underlying,
         conf.comptroller,
@@ -943,40 +971,48 @@ export default class Fuse {
         conf.decimals,
         conf.admin,
         implementationAddress,
-        "0x0",
-        reserveFactor ? reserveFactor : 0,
-        adminFee ? adminFee : 0,
+        "0x00",
+        reserveFactor ? reserveFactor.toString() : 0,
+        adminFee ? adminFee.toString() : 0,
       ];
-      cErc20Delegator = await cErc20Delegator
-        .deploy({
-          data:
-            "0x" +
-            contracts["contracts/CErc20Delegator.sol:CErc20Delegator"].bin,
-          arguments: deployArgs,
-        })
-        .send(options);
+      if (process.env.HARDHAT) {
+        const delegatorFactory = await this.hre.ethers.getContractFactory("CErc20Delegator");
+        const cErc20elegator = await delegatorFactory.deploy(...deployArgs);
+        var cErc20DelegatorAddress = cErc20elegator.address;
+      } else {
+        var cErc20Delegator = new this.web3.eth.Contract(
+          JSON.parse(
+            contracts["contracts/CErc20Delegator.sol:CErc20Delegator"].abi
+          )
+        );
+        cErc20Delegator = await cErc20Delegator
+          .deploy({
+            data:
+              "0x" +
+              contracts["contracts/CErc20Delegator.sol:CErc20Delegator"].bin,
+            arguments: deployArgs,
+          })
+          .send(options);
+        var cErc20DelegatorAddress = cErc20Delegator.options.address;
+      }
 
       // Register new asset with Comptroller
-      cErc20Delegator.options.jsonInterface = JSON.parse(
-        contracts["contracts/CErc20Delegate.sol:CErc20Delegate"].abi
-      );
-
       if (supportMarket) {
         if (collateralFactor)
           await comptroller.methods
             ._supportMarketAndSetCollateralFactor(
-              cErc20Delegator.options.address,
+              cErc20DelegatorAddress,
               collateralFactor
             )
             .send(options);
         else
           await comptroller.methods
-            ._supportMarket(cErc20Delegator.options.address)
+            ._supportMarket(cErc20DelegatorAddress)
             .send(options);
       }
 
       // Return cToken proxy and implementation contract addresses
-      return [cErc20Delegator.options.address, implementationAddress];
+      return [cErc20DelegatorAddress, implementationAddress];
     };
 
     this.identifyInterestRateModel = async function (interestRateModelAddress) {
