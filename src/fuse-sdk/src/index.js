@@ -938,22 +938,22 @@ export default class Fuse {
 
       // Deploy CErc20Delegate implementation contract if necessary
       if (!implementationAddress) {
-        if (!conf.delegateContractName) conf.delegateContractName = "CErc20Delegate";
+        if (!conf.implementationContractName) conf.implementationContractName = "CErc20Delegate";
         if (process.env.HARDHAT) {
-          const delegateFactory = await this.hre.ethers.getContractFactory(conf.delegateContractName);
+          const delegateFactory = await this.hre.ethers.getContractFactory(conf.implementationContractName);
           const cErc20Delegate = await delegateFactory.deploy();
           implementationAddress = cErc20Delegate.address;
         } else {
           var cErc20Delegate = new this.web3.eth.Contract(
             JSON.parse(
-              contracts["contracts/" + conf.delegateContractName + ".sol:" + conf.delegateContractName].abi
+              contracts["contracts/" + conf.implementationContractName + ".sol:" + conf.implementationContractName].abi
             )
           );
           cErc20Delegate = await cErc20Delegate
             .deploy({
               data:
                 "0x" +
-                contracts["contracts/" + conf.delegateContractName + ".sol:" + conf.delegateContractName].bin,
+                contracts["contracts/" + conf.implementationContractName + ".sol:" + conf.implementationContractName].bin,
             })
             .send(options);
           implementationAddress = cErc20Delegate.options.address;
